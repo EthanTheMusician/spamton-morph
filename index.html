@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picture Morph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  /* Every color on the page itself comes from the Spamton sprite. */
+  :root {
+    --black: #000000;
+    --white: #ffffff;
+    --gray: #9c9c9c;
+    --dark: #555555;
+    --pink: #ffaec9;
+    --yellow: #fff201;
+    --red: #ed1c24;
+    --pixel: "Press Start 2P", "Courier New", monospace;
+    --term: "VT323", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--black); color: var(--white); }
+  body {
+    font-family: var(--pixel); font-size: 10px;
+    display: flex; justify-content: center; padding: 16px;
+  }
+  .app { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ---------- the hidden reveal (shows after first morph) ---------- */
+  .reveal {
+    display: grid; grid-template-rows: 0fr; opacity: 0;
+    transition: grid-template-rows .9s cubic-bezier(.2,.9,.2,1), opacity .9s;
+  }
+  .reveal.show { grid-template-rows: 1fr; opacity: 1; }
+  .reveal > div { overflow: hidden; }
+  .title {
+    margin: 4px 0 14px; text-align: center; white-space: nowrap;
+    font-size: min(20px, 4.2vw); font-weight: normal; line-height: 1.4;
+  }
+  .title .w { color: var(--white); }
+  .title .p { color: var(--pink); }
+  .title .y { color: var(--yellow); }
+  .dialog {
+    border: 4px solid var(--white); background: var(--black);
+    padding: 12px 16px; font-family: var(--term); font-size: clamp(24px, 6.5vw, 30px);
+    line-height: 1.1; display: flex; gap: 12px;
+  }
+
+  /* ---------- the one canvas ---------- */
+  .frame {
+    position: relative; border: 4px solid var(--white); background: var(--black);
+    line-height: 0;
+  }
+  #stage {
+    display: block; width: 100%; height: auto;
+    image-rendering: pixelated; cursor: crosshair; touch-action: none;
+  }
+  .frame.morphed #stage { cursor: wait; }
+  .textbox {
+    position: absolute; display: none; z-index: 2;
+    background: transparent; border: 2px dashed var(--gray); outline: none;
+    font-family: Arial, sans-serif; font-weight: bold; padding: 0; margin: 0;
+    line-height: 1; min-width: 60px;
+  }
+  .progress {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 10px;
+    background: var(--black); opacity: 0; transition: opacity .2s;
+  }
+  .progress.on { opacity: 1; }
+  .progress i {
+    display: block; height: 100%; width: 0%;
+    background: repeating-linear-gradient(90deg, var(--pink) 0 8px, var(--yellow) 8px 16px);
+  }
+
+  /* ---------- controls ---------- */
+  .controls { display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .group { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  .tool {
+    width: 34px; height: 34px; padding: 0; display: grid; place-items: center;
+    border: 3px solid var(--dark); color: var(--white); background: var(--black);
+  }
+  .tool.on { border-color: var(--yellow); color: var(--yellow); }
+  .tool svg { display: block; }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+  .swatch {
+    width: 24px; height: 24px; padding: 0; cursor: pointer;
+    border: 3px solid var(--dark); border-radius: 0;
+  }
+  /* the rainbow square that opens the full color picker */
+  .picker {
+    position: relative; width: 24px; height: 24px; cursor: pointer;
+    background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+    border: 3px solid var(--dark);
+  }
+  .picker input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer; border: 0; padding: 0;
+  }
+  /* color 1 (front) and color 2 (back), like MS Paint */
+  .colorpair {
+    position: relative; width: 42px; height: 42px; padding: 0; border: 0;
+    background: none; cursor: pointer; flex: none;
+  }
+  .colorpair i { position: absolute; width: 26px; height: 26px; border: 3px solid var(--white); }
+  .colorpair #c1 { left: 0; top: 0; z-index: 1; }
+  .colorpair #c2 { right: 0; bottom: 0; border-color: var(--gray); }
+  .colorpair:hover #c1 { border-color: var(--yellow); }
+
+  button, label.btn {
+    font-family: var(--pixel); font-size: 10px; text-transform: uppercase;
+    background: var(--black); color: var(--white);
+    border: 3px solid var(--white); padding: 9px 11px; cursor: pointer;
+    line-height: 1; user-select: none;
+  }
+  button:hover:not(:disabled), label.btn:hover { border-color: var(--yellow); color: var(--yellow); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled, .disabled { opacity: .35; cursor: not-allowed; }
+  #go {
+    flex: 1; font-size: 16px; padding: 14px; background: var(--yellow);
+    color: var(--black); border-color: var(--yellow);
+  }
+  #go:hover:not(:disabled) { background: var(--pink); border-color: var(--pink); color: var(--black); }
+  #back { border-color: var(--pink); color: var(--pink); padding: 14px; }
+  #back:hover:not(:disabled) { background: var(--pink); color: var(--black); }
+  input[type=file] { display: none; }
+
+  .knob { display: flex; align-items: center; gap: 8px; color: var(--gray); }
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 96px; height: 6px;
+    background: var(--dark); outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; background: var(--pink); border: 0; cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; background: var(--pink); border: 0; border-radius: 0; }
+  .dot { width: 16px; height: 16px; display: grid; place-items: center; }
+  .dot i { display: block; background: var(--white); border-radius: 50%; }
+  .seg { display: flex; }
+  .seg button { border-width: 3px; padding: 7px 9px; color: var(--gray); border-color: var(--dark); }
+  .seg button + button { margin-left: -3px; }
+  .seg button.on { color: var(--black); background: var(--gray); border-color: var(--gray); }
+
+  /* ---------- side tab for choosing the target (appears after first morph) ---------- */
+  .drawer-tab {
+    position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 20;
+    writing-mode: vertical-rl; letter-spacing: 2px; font-size: 11px;
+    background: var(--pink); color: var(--black); border: 3px solid var(--pink); border-right: 0;
+    padding: 16px 9px; animation: tabIn .7s cubic-bezier(.2,.9,.2,1);
+  }
+  .drawer-tab:hover:not(:disabled) { background: var(--yellow); border-color: var(--yellow); color: var(--black); }
+  /* The general button "press" effect replaces the tab's centering transform,
+     which made it jump away from the mouse. Keep it centered while pressed. */
+  .drawer-tab:active:not(:disabled) { transform: translateY(-50%); }
+  .drawer-tab[hidden] { display: none; }
+  @keyframes tabIn { from { transform: translate(100%, -50%); } }
+  .scrim {
+    position: fixed; inset: 0; z-index: 25; background: rgba(0, 0, 0, .65);
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 30; width: min(330px, 88vw);
+    background: var(--black); border-left: 4px solid var(--white);
+    transform: translateX(105%); transition: transform .35s cubic-bezier(.2,.9,.2,1);
+    display: flex; flex-direction: column; gap: 14px; padding: 16px; overflow-y: auto;
+  }
+  .drawer.open { transform: none; }
+  .drawer-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .drawer-head h2 { margin: 0; font-size: 12px; font-weight: normal; color: var(--yellow); }
+  .drawer-head button { padding: 6px 9px; }
+  .target-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .target {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: var(--white); color: var(--black); border: 4px solid var(--dark);
+    padding: 8px 6px; font-size: 8px;
+  }
+  .target img { width: 100%; height: 116px; object-fit: contain; image-rendering: pixelated; }
+  .target:hover:not(:disabled) { border-color: var(--pink); color: var(--black); }
+  .target.on { border-color: var(--yellow); outline: 3px solid var(--pink); }
+  .target { position: relative; cursor: pointer; line-height: 1.5; text-transform: none; }
+  /* names wrap onto more lines instead of being cut off */
+  .target span { max-width: 100%; overflow-wrap: anywhere; text-align: center; }
+  .target.builtin span, .target.add span { text-transform: uppercase; }
+  .target .del {
+    position: absolute; top: 4px; right: 4px; padding: 4px 5px; line-height: 1;
+    background: var(--black); color: var(--white); font-size: 8px;
+  }
+  .target .del:hover { background: var(--red); }
+  .target.add {
+    background: var(--black); color: var(--pink); border: 4px dashed var(--pink);
+    justify-content: center; min-height: 158px; text-align: center;
+  }
+  .target.add:hover { color: var(--yellow); border-color: var(--yellow); }
+  .target.add b { font-size: 34px; font-weight: normal; line-height: 1; }
+  .target.add span { white-space: normal; }
+
+  /* ---------- locked targets ---------- */
+  .target .lock:empty { display: none; }
+  .target .lock { color: var(--dark); font-size: 7px; line-height: 1.5; }
+  /* mystery look: picture becomes black ink only, blended onto the card color */
+  .target.locked img { filter: grayscale(1) brightness(.9) contrast(40); mix-blend-mode: multiply; }
+  .target.locked { background: var(--gray); }
+  .target.locked.afford { background: var(--yellow); }
+  .target.locked.afford .lock { color: var(--black); }
+  .target.nope { animation: nope .35s; }
+  @keyframes nope { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+  /* ---------- HUD ---------- */
+  .hud { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .kromer { color: var(--yellow); display: flex; align-items: center; gap: 8px; }
+  .kromer i {
+    font-style: normal; width: 22px; height: 22px; display: grid; place-items: center;
+    background: var(--yellow); color: var(--black); border-radius: 50%; font-size: 9px;
+  }
+  .kromer b { font-weight: normal; font-size: 14px; }
+  .hud-btns { display: flex; gap: 8px; }
+  .hud-btns button { padding: 8px 10px; }
+
+  /* ---------- pop-up windows ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .7);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .modal.open { opacity: 1; pointer-events: auto; }
+  .mbox {
+    width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto;
+    background: var(--black); border: 4px solid var(--white); padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .mhead { display: flex; justify-content: space-between; align-items: center; }
+  .mhead h2 { margin: 0; font-size: 12px; font-weight: normal; color: var(--yellow); }
+  .mhead h2 span { color: var(--pink); }
+  .mhead button { padding: 6px 9px; }
+  .mtext { margin: 0; font-family: var(--term); font-size: 21px; line-height: 1.1; color: var(--white); }
+  .mtext.msg { color: var(--pink); min-height: 1.1em; }
+  .coderow { display: flex; gap: 8px; }
+  .coderow input {
+    flex: 1; min-width: 0; background: var(--black); color: var(--yellow);
+    border: 3px solid var(--dark); padding: 8px; font-family: var(--term); font-size: 20px;
+  }
+  .coderow input:focus { outline: none; border-color: var(--pink); }
+  .danger { align-self: flex-start; border-color: var(--red); color: var(--red); }
+  .danger:hover:not(:disabled) { background: var(--red); border-color: var(--red); color: var(--white); }
+  .achlist { display: flex; flex-direction: column; gap: 8px; }
+  .ach {
+    display: flex; justify-content: space-between; align-items: center; gap: 10px;
+    border: 3px solid var(--dark); padding: 8px 10px; color: var(--gray);
+  }
+  .ach b { font-weight: normal; font-size: 9px; }
+  .ach p { margin: 4px 0 0; font-family: var(--term); font-size: 19px; line-height: 1; }
+  .ach .rw { font-size: 8px; white-space: nowrap; }
+  .ach.got { border-color: var(--yellow); color: var(--white); }
+  .ach.got b, .ach.got .rw { color: var(--yellow); }
+
+  /* ---------- achievement toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 18px; z-index: 60;
+    width: min(440px, calc(100vw - 32px)); transform: translate(-50%, 160%);
+    background: var(--black); border: 4px solid var(--white); padding: 12px 14px;
+    transition: transform .45s cubic-bezier(.2,.9,.2,1); pointer-events: none;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .toast.show { transform: translate(-50%, 0); }
+  .toast .thead { color: var(--pink); font-size: 8px; }
+  .toast .tname { color: var(--yellow); font-size: 12px; }
+  .toast .tquip { font-family: var(--term); font-size: 22px; line-height: 1.05; }
+  .toast .treward { color: var(--pink); font-size: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Hidden until the first successful morph -->
+  <div class="reveal" id="reveal" aria-live="polite">
+    <div>
+      <h1 class="title" id="title"></h1>
+      <div class="dialog"><span>*</span><span id="typed"></span></div>
+      <div class="hud">
+        <span class="kromer" title="Kromer: earned by morphing and achievements, spent on targets">
+          <i>K</i><b id="kromerCount">0</b> KROMER
+        </span>
+        <span class="hud-btns">
+          <button id="collectionBtn">Collection</button>
+          <button id="saveBtn">Save</button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="frame" id="frame">
+    <canvas id="stage" width="480" height="632"></canvas>
+    <input id="textBox" class="textbox" type="text" autocomplete="off" spellcheck="false">
+    <div class="progress" id="progress"><i></i></div>
+  </div>
+
+  <div class="controls">
+    <!-- drawing tools, then shapes (buttons are built in app.js) -->
+    <div class="group" id="tools"></div>
+    <div class="group" id="shapes"></div>
+
+    <div class="row">
+      <div class="group" id="fillmodes"></div>
+      <div class="knob" title="Size">
+        <span class="dot"><i id="dotPreview"></i></span>
+        <input type="range" id="brush" min="1" max="60" value="18" aria-label="Size">
+      </div>
+      <div class="group" id="actions"></div>
+    </div>
+
+    <div class="row">
+      <button class="colorpair" id="colorPair" title="Color 1 / Color 2 (click to swap)" aria-label="Swap colors">
+        <i id="c1"></i><i id="c2"></i>
+      </button>
+      <div class="swatches" id="palette"></div>
+    </div>
+
+    <div class="row">
+      <button id="clear">Clear</button>
+      <label class="btn" id="uploadBtn">Upload<input type="file" id="upload" accept="image/*"></label>
+      <div class="seg" id="res" title="Detail">
+        <button data-v="60">Lo</button><button data-v="96" class="on">Med</button><button data-v="120">Hi</button>
+      </div>
+      <div class="knob" title="Speed">
+        <span>&raquo;</span>
+        <input type="range" id="speed" min="1" max="10" value="5" aria-label="Speed">
+      </div>
+    </div>
+
+    <div class="row">
+      <button id="go">Morph</button>
+      <button id="back" disabled>Back</button>
+    </div>
+  </div>
+</div>
+
+<!-- Side tab: hidden until the first morph, so the surprise isn't spoiled -->
+<button class="drawer-tab" id="drawerTab" hidden>Targets</button>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Choose a target">
+  <div class="drawer-head">
+    <h2>Choose a target</h2>
+    <button id="drawerClose" aria-label="Close">X</button>
+  </div>
+  <div class="target-grid" id="targetGrid"></div>
+</aside>
+
+<!-- Achievements list -->
+<div class="modal" id="collectionModal">
+  <div class="mbox">
+    <div class="mhead"><h2>Collection <span id="achCount"></span></h2><button class="mclose" aria-label="Close">X</button></div>
+    <div id="achList" class="achlist"></div>
+  </div>
+</div>
+
+<!-- Save code -->
+<div class="modal" id="saveModal">
+  <div class="mbox">
+    <div class="mhead"><h2>Save code</h2><button class="mclose" aria-label="Close">X</button></div>
+    <p class="mtext">Your progress saves automatically in this browser. To move it to
+      another computer (or keep a backup), copy this code:</p>
+    <div class="coderow"><input id="saveCode" readonly><button id="copyCode">Copy</button></div>
+    <p class="mtext">Have a code? Paste it here:</p>
+    <div class="coderow"><input id="loadCode" placeholder="BIGSHOT-..."><button id="loadBtn">Load</button></div>
+    <p class="mtext msg" id="saveMsg"></p>
+    <button id="resetBtn" class="danger">Erase progress</button>
+  </div>
+</div>
+
+<!-- Achievement pop-up -->
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <div class="thead">[[ ACHIEVEMENT ]]</div>
+  <div class="tname"></div>
+  <div class="tquip"></div>
+  <div class="treward"></div>
+</div>
+
+<script src="targets.js"></script>
+<script src="game.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
