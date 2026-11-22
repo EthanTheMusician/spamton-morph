@@ -48,8 +48,10 @@ let mode = 'draw';
 let sourceDirty = true;      // picture changed since last calculation?
 let hasRevealed = false;     // has the secret title been shown yet?
 let touched = false;         // has the user changed the starter picture?
-// For the PHOTO OP achievement: was this picture uploaded?
-const flags = { photo: false };
+// Saving (see SAVING near the bottom)
+const SAVE_KEY = 'morphSave';
+let saveTimer = null;
+let loading = true;            // don't save while the saved game is being loaded
 
 // Every morph is remembered, so BACK can undo them one at a time.
 const morphHistory = [];
@@ -219,7 +221,7 @@ function snapshot() {          // call BEFORE changing the picture
   touched = true;
   updateUndoButtons();
 }
-function changed() { sourceDirty = true; showPaper(); updateUndoButtons(); }
+function changed() { sourceDirty = true; showPaper(); updateUndoButtons(); saveSoon(); }
 function undo() {
   commitText();
   if (mode !== 'draw' || !undoStack.length) return;
@@ -444,7 +446,6 @@ function commitText() {
   pctx.fillText(v, p.x + 2, p.y + 2);
   pctx.restore();
   changed();
-  Game.onColor(color);
 }
 textBox.addEventListener('keydown', e => {
   if (e.key === 'Enter') commitText();
@@ -466,7 +467,6 @@ stage.addEventListener('pointerdown', e => {
   const p = canvasPoint(e);
   const right = e.button === 2;
   const main = right ? color2 : color1, other = right ? color1 : color2;
-  if (tool !== 'picker' && tool !== 'eraser' && tool !== 'text') Game.onColor(main);
 
   if (tool === 'text') { openText(p, main); return; }
   if (tool === 'picker') {
@@ -494,7 +494,6 @@ function endDrag(e) {
   if (!drag) return;
   if (isShape(tool)) {
     drawShape(pctx, drag.start, canvasPoint(e), e.shiftKey, drag.main, drag.other);
-    Game.onShape(tool);
   }
   clearInterval(drag.timer);
   drag = null;
@@ -520,7 +519,6 @@ function starterPicture() {
 clearBtn.onclick = () => {
   commitText(); snapshot();
   pctx.fillStyle = '#ffffff'; pctx.fillRect(0, 0, PW, PH);
-  flags.photo = false;
   changed();
 };
 
@@ -542,7 +540,6 @@ uploadInput.onchange = async e => {
   commitText(); snapshot();
   pctx.fillStyle = '#ffffff'; pctx.fillRect(0, 0, PW, PH);
   fitImage(pctx, img, PW, PH, 'cover');
-  flags.photo = true;
   e.target.value = '';
   changed();
 };
@@ -577,7 +574,9 @@ document.getElementById('drawerClose').onclick = () => openDrawer(false);
 scrim.onclick = () => openDrawer(false);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') openDrawer(false); });
 
+let targetId = null;
 function selectTarget(t, card) {
+  targetId = t.id; saveSoon();
   const img = new Image();
   img.onload = () => {
     targetImg = img;
@@ -599,15 +598,13 @@ function addTargetCard(t, custom) {
   const name = document.createElement('span');
   name.textContent = t.name;           // textContent: safe for any file name
   card.title = t.name;
+  card.dataset.id = t.id;
   const img = document.createElement('img');
   img.alt = ''; img.src = t.src;
   card.append(img, name);
   card.onclick = () => {
-    // Locked built-in targets: game.js buys it (if you have the Kromer) or shakes the card.
-    if (!custom && !Game.cardClicked(t.id, card)) return;
     selectTarget(t, card); setTimeout(() => openDrawer(false), 250);
   };
-  if (!custom) Game.decorateCard(t.id, card);
   if (custom) {
     const del = document.createElement('span');
     del.className = 'del'; del.textContent = 'X'; del.title = 'Remove';
@@ -662,7 +659,6 @@ addCard.querySelector('input').onchange = async e => {
     src: c.toDataURL('image/png'),
   };
   saveCustomTargets([...customTargets, t]);
-  Game.onUploadTarget();
   const card = addTargetCard(t, true);
   selectTarget(t, card);
   card.scrollIntoView({ block: 'nearest' });
@@ -854,8 +850,7 @@ goBtn.onclick = async () => {
   resetUndo();
   setMode('draw');
   if (!hasRevealed) { hasRevealed = true; reveal(); }
-  Game.onMorph({ photo: flags.photo });
-  flags.photo = false;
+  saveNow();
 };
 
 backBtn.onclick = async () => {
@@ -871,7 +866,64 @@ backBtn.onclick = async () => {
   resetUndo();
   setMode('draw');
   showPaper();
-  Game.onBack();
+  saveNow();
+};
+
+// =====================================================================
+//  SAVING
+//  Your picture, the chosen target and whether the title has been
+//  revealed are kept in this browser (localStorage), so closing the tab
+//  doesn't lose anything. (Uploaded targets are saved separately, above.)
+// =====================================================================
+function saveNow() {
+  clearTimeout(saveTimer);
+  if (loading || (!touched && !hasRevealed)) return;   // nothing drawn yet: nothing to save
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      revealed: hasRevealed, target: targetId, picture: paper.toDataURL('image/png'),
+    }));
+  } catch (err) { /* storage full or blocked: nothing we can do */ }
+}
+// Drawing changes the picture many times a second, so wait for a short pause.
+function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); }
+
+function loadSave() {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) {}
+  if (!data || typeof data !== 'object') { loading = false; return; }
+  // Old saves from the Kromer version have no picture; they just reveal the title.
+  if (data.revealed || data.morphs > 0) { hasRevealed = true; reveal(); }
+  if (data.target) {
+    const card = [...targetGrid.querySelectorAll('.target')].find(c => c.dataset.id === data.target);
+    if (card) card.click();
+  }
+  if (typeof data.picture === 'string' && data.picture.startsWith('data:image/')) {
+    touched = true;            // keep the starter text from drawing over it
+    const img = new Image();
+    img.onload = () => { pctx.drawImage(img, 0, 0, PW, PH); sourceDirty = true; showPaper(); loading = false; };
+    img.onerror = () => { loading = false; };
+    img.src = data.picture;
+  } else loading = false;
+}
+
+// SAVE button: download the picture, or start over.
+const saveModal = document.getElementById('saveModal');
+const openSave = open => saveModal.classList.toggle('open', open);
+document.getElementById('saveBtn').onclick = () => openSave(true);
+saveModal.addEventListener('click', e => { if (e.target === saveModal || e.target.closest('.mclose')) openSave(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') openSave(false); });
+document.getElementById('downloadBtn').onclick = () => {
+  commitText();
+  const a = document.createElement('a');
+  a.download = 'spamton-morph.png';
+  a.href = paper.toDataURL('image/png');
+  a.click();
+};
+document.getElementById('resetBtn').onclick = () => {
+  if (!confirm('Start over? This erases your saved picture and hides the title again. Uploaded targets stay.')) return;
+  loading = true;
+  try { localStorage.removeItem(SAVE_KEY); } catch (err) {}
+  location.reload();
 };
 
 // ---------- The surprise reveal ----------
@@ -900,9 +952,7 @@ showPaper();
 setTool('brush');
 updateColorUI();
 setMode('draw');
-Game.init();
-// Someone who has played before skips the surprise and sees everything right away.
-if (Game.hasPlayed) { hasRevealed = true; reveal(); }
+loadSave();
 // The pixel font may arrive a moment late; redraw the starter text once it has.
 document.fonts.load('40px "Press Start 2P"').then(() => {
   if (!touched) { starterPicture(); showPaper(); }

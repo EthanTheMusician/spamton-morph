@@ -199,25 +199,8 @@
   .target.add b { font-size: 34px; font-weight: normal; line-height: 1; }
   .target.add span { white-space: normal; }
 
-  /* ---------- locked targets ---------- */
-  .target .lock:empty { display: none; }
-  .target .lock { color: var(--dark); font-size: 7px; line-height: 1.5; }
-  /* mystery look: picture becomes black ink only, blended onto the card color */
-  .target.locked img { filter: grayscale(1) brightness(.9) contrast(40); mix-blend-mode: multiply; }
-  .target.locked { background: var(--gray); }
-  .target.locked.afford { background: var(--yellow); }
-  .target.locked.afford .lock { color: var(--black); }
-  .target.nope { animation: nope .35s; }
-  @keyframes nope { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-
   /* ---------- HUD ---------- */
-  .hud { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-  .kromer { color: var(--yellow); display: flex; align-items: center; gap: 8px; }
-  .kromer i {
-    font-style: normal; width: 22px; height: 22px; display: grid; place-items: center;
-    background: var(--yellow); color: var(--black); border-radius: 50%; font-size: 9px;
-  }
-  .kromer b { font-weight: normal; font-size: 14px; }
+  .hud { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
   .hud-btns { display: flex; gap: 8px; }
   .hud-btns button { padding: 8px 10px; }
 
@@ -238,39 +221,8 @@
   .mhead h2 span { color: var(--pink); }
   .mhead button { padding: 6px 9px; }
   .mtext { margin: 0; font-family: var(--term); font-size: 21px; line-height: 1.1; color: var(--white); }
-  .mtext.msg { color: var(--pink); min-height: 1.1em; }
-  .coderow { display: flex; gap: 8px; }
-  .coderow input {
-    flex: 1; min-width: 0; background: var(--black); color: var(--yellow);
-    border: 3px solid var(--dark); padding: 8px; font-family: var(--term); font-size: 20px;
-  }
-  .coderow input:focus { outline: none; border-color: var(--pink); }
   .danger { align-self: flex-start; border-color: var(--red); color: var(--red); }
   .danger:hover:not(:disabled) { background: var(--red); border-color: var(--red); color: var(--white); }
-  .achlist { display: flex; flex-direction: column; gap: 8px; }
-  .ach {
-    display: flex; justify-content: space-between; align-items: center; gap: 10px;
-    border: 3px solid var(--dark); padding: 8px 10px; color: var(--gray);
-  }
-  .ach b { font-weight: normal; font-size: 9px; }
-  .ach p { margin: 4px 0 0; font-family: var(--term); font-size: 19px; line-height: 1; }
-  .ach .rw { font-size: 8px; white-space: nowrap; }
-  .ach.got { border-color: var(--yellow); color: var(--white); }
-  .ach.got b, .ach.got .rw { color: var(--yellow); }
-
-  /* ---------- achievement toast ---------- */
-  .toast {
-    position: fixed; left: 50%; bottom: 18px; z-index: 60;
-    width: min(440px, calc(100vw - 32px)); transform: translate(-50%, 160%);
-    background: var(--black); border: 4px solid var(--white); padding: 12px 14px;
-    transition: transform .45s cubic-bezier(.2,.9,.2,1); pointer-events: none;
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .toast.show { transform: translate(-50%, 0); }
-  .toast .thead { color: var(--pink); font-size: 8px; }
-  .toast .tname { color: var(--yellow); font-size: 12px; }
-  .toast .tquip { font-family: var(--term); font-size: 22px; line-height: 1.05; }
-  .toast .treward { color: var(--pink); font-size: 8px; }
 </style>
 </head>
 <body>
@@ -282,11 +234,7 @@
       <h1 class="title" id="title"></h1>
       <div class="dialog"><span>*</span><span id="typed"></span></div>
       <div class="hud">
-        <span class="kromer" title="Kromer: earned by morphing and achievements, spent on targets">
-          <i>K</i><b id="kromerCount">0</b> KROMER
-        </span>
         <span class="hud-btns">
-          <button id="collectionBtn">Collection</button>
           <button id="saveBtn">Save</button>
         </span>
       </div>
@@ -350,38 +298,20 @@
   <div class="target-grid" id="targetGrid"></div>
 </aside>
 
-<!-- Achievements list -->
-<div class="modal" id="collectionModal">
-  <div class="mbox">
-    <div class="mhead"><h2>Collection <span id="achCount"></span></h2><button class="mclose" aria-label="Close">X</button></div>
-    <div id="achList" class="achlist"></div>
-  </div>
-</div>
-
-<!-- Save code -->
+<!-- Save window -->
 <div class="modal" id="saveModal">
   <div class="mbox">
-    <div class="mhead"><h2>Save code</h2><button class="mclose" aria-label="Close">X</button></div>
-    <p class="mtext">Your progress saves automatically in this browser. To move it to
-      another computer (or keep a backup), copy this code:</p>
-    <div class="coderow"><input id="saveCode" readonly><button id="copyCode">Copy</button></div>
-    <p class="mtext">Have a code? Paste it here:</p>
-    <div class="coderow"><input id="loadCode" placeholder="BIGSHOT-..."><button id="loadBtn">Load</button></div>
-    <p class="mtext msg" id="saveMsg"></p>
-    <button id="resetBtn" class="danger">Erase progress</button>
+    <div class="mhead"><h2>Save</h2><button class="mclose" aria-label="Close">X</button></div>
+    <p class="mtext">Your picture and chosen target save automatically in this browser,
+      so you can close the tab and pick up where you left off.</p>
+    <p class="mtext">To keep a copy of your picture, download it. You can load it back
+      later with the upload button.</p>
+    <button id="downloadBtn" style="align-self:flex-start">Download picture</button>
+    <button id="resetBtn" class="danger">Start over</button>
   </div>
-</div>
-
-<!-- Achievement pop-up -->
-<div class="toast" id="toast" role="status" aria-live="polite">
-  <div class="thead">[[ ACHIEVEMENT ]]</div>
-  <div class="tname"></div>
-  <div class="tquip"></div>
-  <div class="treward"></div>
 </div>
 
 <script src="targets.js"></script>
-<script src="game.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
