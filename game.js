@@ -4,7 +4,7 @@
 //  - Progress autosaves in this browser (localStorage).
 //  - A "save code" (BIGSHOT-....) holds the same progress as short text,
 //    so it can be moved to another computer or restored after clearing data.
-//  - app.js tells this file when things happen (Game.onMorph, Game.onText...),
+//  - app.js tells this file when things happen (Game.onMorph, Game.onShape...),
 //    and this file decides what gets unlocked.
 // =====================================================================
 
@@ -24,7 +24,7 @@ const Game = (() => {
     face:    { type: 'start' },
     laugh:   { type: 'ach', hint: 'Morph 3 times' },
     glitch:  { type: 'ach', hint: 'Press BACK 5 times in a row' },
-    hat:     { type: 'ach', hint: 'Write a secret phrase...' },
+    hat:     { type: 'shop', price: 20 },
     puppet:  { type: 'ach', hint: 'Unlock every other target' },
     closeup: { type: 'shop', price: 15 },
     portrait:{ type: 'shop', price: 25 },
@@ -53,16 +53,8 @@ const Game = (() => {
       quip: 'SAY [[Cheese]]! ACTUALLY DON\'T. JUST HOLD STILL.' },
     { id: 'shop',    name: 'SHOPAHOLIC',         desc: 'Buy a target with Kromer.', reward: 5,
       quip: 'THANK YOU FOR YOUR [[Hard-Earned]] KROMER!!' },
-    { id: 'blank',   name: 'BLANK CHECK',        desc: 'Morph a completely empty canvas.', reward: 10, hidden: true,
-      quip: 'NOTHING? YOU GAVE ME... NOTHING? [[Bold Strategy]].' },
-    { id: 'bigshot', name: 'NOW\'S YOUR CHANCE', desc: 'Write "BIG SHOT" with the text tool.', reward: 10, hidden: true, unlock: 'hat',
-      quip: 'YES!! YES!!! THAT\'S THE [[Spirit]] KID!!' },
-    { id: 'kromer',  name: 'FREE MONEY',         desc: 'Write "KROMER" with the text tool.', reward: 25, hidden: true,
-      quip: 'YOU SAID THE MAGIC WORD. HERE. TAKE IT. [[Quickly]].' },
-    { id: 'upside',  name: 'HEADS OR TAILS',     desc: 'Morph a picture you flipped or rotated upside down.', reward: 10, hidden: true,
-      quip: 'WHY IS EVERYTHING [[Upside Down]]? OH WAIT. THAT\'S ME.' },
-    { id: 'night',   name: 'NIGHT SHIFT',        desc: 'Morph between midnight and 4 AM.', reward: 15, hidden: true,
-      quip: 'GO TO [[Sleep]]. ...AFTER ONE MORE MORPH.' },
+    // (Secret achievements were removed for now. "hidden: true" still works
+    //  if you add new ones later: they show as ??? until found.)
     { id: 'collector', name: 'FULL COLLECTION',  desc: 'Unlock every other target.', reward: 50, unlock: 'puppet',
       quip: 'YOU DID IT!! NOW YOU\'RE A REAL [[BIG SHOT]]!!!' },
   ];
@@ -75,6 +67,8 @@ const Game = (() => {
     const saved = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (saved) state = Object.assign(fresh(), saved);
   } catch (e) { /* no save yet, or storage blocked */ }
+  // Forget achievements that no longer exist (e.g. the removed secrets).
+  state.ach = state.ach.filter(id => achById[id]);
 
   function save() {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch (e) {}
@@ -118,10 +112,7 @@ const Game = (() => {
     if (state.morphs >= 3) grant('repeat');
     if (state.morphs >= 10) grant('ten');
     if (state.morphs >= 25) grant('loyal');
-    if (info.blank) grant('blank');
     if (info.photo) grant('photo');
-    if (info.upside) grant('upside');
-    if (new Date().getHours() < 4) grant('night');
   }
   function onBack() {
     session.backStreak++;
@@ -134,11 +125,6 @@ const Game = (() => {
   function onShape(id) {
     if (!state.shapes.includes(id)) { state.shapes.push(id); save(); }
     if (state.shapes.length >= 6) grant('shapes');
-  }
-  function onText(text) {
-    const t = text.toUpperCase().replace(/[^A-Z]/g, '');
-    if (t.includes('BIGSHOT')) grant('bigshot');
-    if (t.includes('KROMER')) grant('kromer');
   }
   const onUploadTarget = () => grant('upload');
 
@@ -289,7 +275,7 @@ const Game = (() => {
 
   return {
     init, isUnlocked, decorateCard, cardClicked,
-    onMorph, onBack, onColor, onShape, onText, onUploadTarget,
+    onMorph, onBack, onColor, onShape, onUploadTarget,
     get hasPlayed() { return state.morphs > 0; },
   };
 })();

@@ -48,8 +48,8 @@ let mode = 'draw';
 let sourceDirty = true;      // picture changed since last calculation?
 let hasRevealed = false;     // has the secret title been shown yet?
 let touched = false;         // has the user changed the starter picture?
-// For secret achievements: was this picture uploaded / turned upside down?
-const flags = { photo: false, upside: false };
+// For the PHOTO OP achievement: was this picture uploaded?
+const flags = { photo: false };
 
 // Every morph is remembered, so BACK can undo them one at a time.
 const morphHistory = [];
@@ -266,7 +266,6 @@ function transformPaper(kind) {
     if (kind === 'flipH') { pctx.translate(PW, 0); pctx.scale(-1, 1); }
     if (kind === 'flipV') { pctx.translate(0, PH); pctx.scale(1, -1); }
     if (kind === 'rotate') { pctx.translate(PW, PH); pctx.rotate(Math.PI); }
-    if (kind === 'flipV' || kind === 'rotate') flags.upside = !flags.upside;  // twice = upright again
     pctx.drawImage(c, 0, 0);
     pctx.restore();
   }
@@ -446,7 +445,6 @@ function commitText() {
   pctx.restore();
   changed();
   Game.onColor(color);
-  Game.onText(v);   // secret phrases live here...
 }
 textBox.addEventListener('keydown', e => {
   if (e.key === 'Enter') commitText();
@@ -522,7 +520,7 @@ function starterPicture() {
 clearBtn.onclick = () => {
   commitText(); snapshot();
   pctx.fillStyle = '#ffffff'; pctx.fillRect(0, 0, PW, PH);
-  flags.photo = false; flags.upside = false;
+  flags.photo = false;
   changed();
 };
 
@@ -544,7 +542,7 @@ uploadInput.onchange = async e => {
   commitText(); snapshot();
   pctx.fillStyle = '#ffffff'; pctx.fillRect(0, 0, PW, PH);
   fitImage(pctx, img, PW, PH, 'cover');
-  flags.photo = true; flags.upside = false;
+  flags.photo = true;
   e.target.value = '';
   changed();
 };
@@ -845,7 +843,6 @@ goBtn.onclick = async () => {
   if (mode !== 'draw' || !targetImg) return;
   setMode('busy');
   const before = copyOf(paper);
-  const blank = isBlank(paper);
   if (sourceDirty || !particles) { await solve(); particles = buildParticles(); }
   const entry = { before, particles, W, H, N, SCALE };
   await animate(entry, true);
@@ -857,21 +854,9 @@ goBtn.onclick = async () => {
   resetUndo();
   setMode('draw');
   if (!hasRevealed) { hasRevealed = true; reveal(); }
-  Game.onMorph({ blank, photo: flags.photo, upside: flags.upside });
-  flags.photo = false; flags.upside = false;
+  Game.onMorph({ photo: flags.photo });
+  flags.photo = false;
 };
-
-// Is the picture one single color? (for a secret achievement)
-function isBlank(canvas) {
-  const c = document.createElement('canvas'); c.width = 48; c.height = 63;
-  const x = c.getContext('2d', { willReadFrequently: true });
-  x.drawImage(canvas, 0, 0, c.width, c.height);
-  const d = x.getImageData(0, 0, c.width, c.height).data;
-  for (let i = 4; i < d.length; i += 4) {
-    if (Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 12) return false;
-  }
-  return true;
-}
 
 backBtn.onclick = async () => {
   commitText();
