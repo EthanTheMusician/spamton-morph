@@ -871,16 +871,15 @@ backBtn.onclick = async () => {
 
 // =====================================================================
 //  SAVING
-//  Your picture, the chosen target and whether the title has been
-//  revealed are kept in this browser (localStorage), so closing the tab
+//  Your picture and the chosen target are kept in this browser (localStorage), so closing the tab
 //  doesn't lose anything. (Uploaded targets are saved separately, above.)
 // =====================================================================
 function saveNow() {
   clearTimeout(saveTimer);
-  if (loading || (!touched && !hasRevealed)) return;   // nothing drawn yet: nothing to save
+  if (loading || !touched) return;   // nothing drawn yet: nothing to save
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
-      revealed: hasRevealed, target: targetId, picture: paper.toDataURL('image/png'),
+      target: targetId, picture: paper.toDataURL('image/png'),
     }));
   } catch (err) { /* storage full or blocked: nothing we can do */ }
 }
@@ -892,7 +891,7 @@ function loadSave() {
   try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) {}
   if (!data || typeof data !== 'object') { loading = false; return; }
   // Old saves from the Kromer version have no picture; they just reveal the title.
-  if (data.revealed || data.morphs > 0) { hasRevealed = true; reveal(); }
+  // The title, message and Targets tab stay hidden until you morph in this visit.
   if (data.target) {
     const card = [...targetGrid.querySelectorAll('.target')].find(c => c.dataset.id === data.target);
     if (card) card.click();
@@ -920,7 +919,7 @@ document.getElementById('downloadBtn').onclick = () => {
   a.click();
 };
 document.getElementById('resetBtn').onclick = () => {
-  if (!confirm('Start over? This erases your saved picture and hides the title again. Uploaded targets stay.')) return;
+  if (!confirm('Start over? This erases your saved picture. Uploaded targets stay.')) return;
   loading = true;
   try { localStorage.removeItem(SAVE_KEY); } catch (err) {}
   location.reload();
