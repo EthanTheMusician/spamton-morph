@@ -69,32 +69,43 @@
   const shell = document.createElement('img');
   shell.className = 'shell'; shell.alt = ''; shell.src = 'assets/shell.png?v=1';
   shell.draggable = false;
+  // It only ever sits in the empty black space AROUND the app (never on the
+  // canvas or the buttons). The random choices are made once per visit; the
+  // exact spot is worked out again whenever the page changes size (like when
+  // the title appears after the first morph and pushes everything down).
+  const roll = { side: Math.random() < 0.5 ? 'left' : 'right', fx: Math.random(), fy: Math.random() };
+  const SW = 96, SH = 150, PAD = 10;
   function placeShell() {
-    const app = document.querySelector('.app').getBoundingClientRect();
+    const appEl = document.querySelector('.app');
+    const app = appEl.getBoundingClientRect();
+    const sx = window.scrollX, sy = window.scrollY;
     const W = document.documentElement.clientWidth;
-    const pageH = Math.max(document.body.scrollHeight, window.innerHeight);
-    const SW = 96, SH = 150, pad = 12;
-    const spots = [];
-    // Wide screens: the empty space left or right of the app.
-    if (app.left - pad * 2 >= SW) spots.push([pad, app.left - SW - pad]);
-    if (W - app.right - pad * 2 >= SW) spots.push([app.right + pad, W - SW - pad]);
+    const leftRoom = app.left - PAD * 2, rightRoom = W - app.right - PAD * 2;
     let left, top;
-    if (spots.length) {
-      const [a, b] = spots[Math.floor(Math.random() * spots.length)];
-      left = a + Math.random() * Math.max(0, b - a);
-      top = pad + Math.random() * Math.max(0, pageH - SH - pad * 2);
+    if (leftRoom >= SW || rightRoom >= SW) {
+      // Wide screens: the black space beside the app, anywhere from top to bottom.
+      document.body.style.paddingBottom = '';
+      let side = roll.side;
+      if (side === 'left' && leftRoom < SW) side = 'right';
+      if (side === 'right' && rightRoom < SW) side = 'left';
+      const [a, b] = side === 'left' ? [PAD, app.left - SW - PAD] : [app.right + PAD, W - SW - PAD];
+      left = a + roll.fx * Math.max(0, b - a);
+      const pageH = Math.max(app.bottom + sy + 16, window.innerHeight);
+      top = 50 + roll.fy * Math.max(0, pageH - SH - 60);    // 50: stay clear of the key icon
     } else {
-      // Narrow screens (phones): tucked into the space below everything.
-      document.body.style.paddingBottom = (SH + 30) + 'px';
-      left = pad + Math.random() * Math.max(0, W - SW - pad * 2);
-      top = Math.max(document.body.scrollHeight - SH - 20, pageH - SH - 20);
+      // Narrow screens (phones): the black space below the app.
+      document.body.style.paddingBottom = (SH + 40) + 'px';
+      left = PAD + roll.fx * Math.max(0, W - SW - PAD * 2);
+      top = app.bottom + sy + 24;
     }
-    shell.style.left = Math.round(left + window.scrollX) + 'px';
+    shell.style.left = Math.round(left + sx) + 'px';
     shell.style.top = Math.round(top) + 'px';
   }
   document.body.appendChild(shell);
-  // Wait for fonts/layout so the page has its final size first.
+  placeShell();
   window.addEventListener('load', placeShell);
+  window.addEventListener('resize', placeShell);
+  if (window.ResizeObserver) new ResizeObserver(placeShell).observe(document.querySelector('.app'));
 
   shell.onclick = () => {
     if (!hasKey) {
