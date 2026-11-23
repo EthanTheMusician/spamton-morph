@@ -586,6 +586,18 @@ function selectTarget(t, card) {
   targetGrid.querySelectorAll('.target').forEach(c => c.classList.toggle('on', c === card));
 }
 
+// Secret targets: hidden until the KEYGEN secret is found (see secret.js).
+// Giant = 'neo', NEO = 'puppet', Shell = 'shell'.
+const SECRET_IDS = ['neo', 'puppet', 'shell'];
+const UNLOCK_KEY = 'morphUnlocked';
+let secretUnlocked = false;
+try { secretUnlocked = localStorage.getItem(UNLOCK_KEY) === '1'; } catch (err) {}
+function unlockSecretTargets() {
+  secretUnlocked = true;
+  try { localStorage.setItem(UNLOCK_KEY, '1'); } catch (err) {}
+  targetGrid.querySelectorAll('.secret-locked').forEach(c => c.classList.remove('secret-locked'));
+}
+
 // The last card in the grid is always "Upload your own".
 const addCard = document.createElement('label');
 addCard.className = 'target add';
@@ -599,6 +611,7 @@ function addTargetCard(t, custom) {
   name.textContent = t.name;           // textContent: safe for any file name
   card.title = t.name;
   card.dataset.id = t.id;
+  if (!custom && !secretUnlocked && SECRET_IDS.includes(t.id)) card.classList.add('secret-locked');
   const img = document.createElement('img');
   img.alt = ''; img.src = t.src;
   card.append(img, name);
@@ -894,7 +907,7 @@ function loadSave() {
   // hidden until you morph). The saved picture waits in the SAVE window.
   if (data.target) {
     const card = [...targetGrid.querySelectorAll('.target')].find(c => c.dataset.id === data.target);
-    if (card) card.click();
+    if (card && !card.classList.contains('secret-locked')) card.click();
   }
   if (typeof data.picture === 'string' && data.picture.startsWith('data:image/')) {
     lastPicture = data.picture;
