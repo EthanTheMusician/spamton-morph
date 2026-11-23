@@ -53,19 +53,20 @@
   .keygen {
     position: absolute; right: 10px; bottom: 8px; padding: 0; border: 0; background: none;
     font-family: var(--pixel); font-size: 9px; color: var(--white); cursor: default;
-    transition: color 1.5s, text-shadow 1.5s;
+    opacity: 0; visibility: hidden;   /* hidden until you've stayed still long enough */
+    transition: opacity 2s, visibility 2s;
   }
   .keygen:hover:not(:disabled), .keygen:disabled { background: none; color: var(--white); border: 0; }
-  .keygen.ready, .keygen.ready:hover { color: #3dff4e; text-shadow: 0 0 6px #3dff4e; cursor: pointer; }
-  .keygen.used, .keygen.used:disabled { color: var(--dark); text-shadow: none; }
+  .keygen.ready, .keygen.ready:hover { color: #3dff4e; text-shadow: 0 0 6px #3dff4e; cursor: pointer; opacity: 1; visibility: visible; }
+  .keygen.used { display: none; }
   .key-icon {
-    position: fixed; top: 10px; right: 10px; z-index: 40; width: 48px; height: 24px;
+    position: fixed; top: 10px; right: 10px; z-index: 22; width: 48px; height: 24px;  /* under the Targets drawer (25/30) */
     image-rendering: pixelated; filter: drop-shadow(0 0 4px #3dff4e); pointer-events: none;
     animation: keypop .6s cubic-bezier(.2,1.6,.4,1);
   }
   @keyframes keypop { from { transform: scale(0) rotate(-40deg); } to { transform: none; } }
   .shell {
-    position: absolute; z-index: 5; width: 96px; height: 150px; opacity: .09;
+    position: absolute; z-index: 5; width: 96px; height: 150px; opacity: .16;
     image-rendering: pixelated; filter: brightness(1.6); cursor: default;
   }
   .shell.nope { animation: shellnope .4s; }
@@ -349,8 +350,8 @@
 <div class="blackout" id="blackout"></div>
 <div class="fight" id="fight"><canvas id="fightCanvas" width="640" height="720"></canvas></div>
 
-<script src="targets.js?v=6"></script>
-<script src="app.js?v=6"></script>
-<script src="secret.js?v=6"></script>
+<script src="targets.js?v=7"></script>
+<script src="app.js?v=7"></script>
+<script src="secret.js?v=7"></script>
 </body>
 </html>
