@@ -890,24 +890,35 @@ function loadSave() {
   let data = null;
   try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) {}
   if (!data || typeof data !== 'object') { loading = false; return; }
-  // Old saves from the Kromer version have no picture; they just reveal the title.
-  // The title, message and Targets tab stay hidden until you morph in this visit.
+  // Every visit starts on the clean "draw something" text (and the title stays
+  // hidden until you morph). The saved picture waits in the SAVE window.
   if (data.target) {
     const card = [...targetGrid.querySelectorAll('.target')].find(c => c.dataset.id === data.target);
     if (card) card.click();
   }
   if (typeof data.picture === 'string' && data.picture.startsWith('data:image/')) {
-    touched = true;            // keep the starter text from drawing over it
-    const img = new Image();
-    img.onload = () => { pctx.drawImage(img, 0, 0, PW, PH); sourceDirty = true; showPaper(); loading = false; };
-    img.onerror = () => { loading = false; };
-    img.src = data.picture;
-  } else loading = false;
+    lastPicture = data.picture;
+  }
+  loading = false;
 }
+// The picture from your last visit (kept here even after you start drawing
+// again, since autosave then starts saving the new picture instead).
+let lastPicture = null;
 
 // SAVE button: download the picture, or start over.
 const saveModal = document.getElementById('saveModal');
-const openSave = open => saveModal.classList.toggle('open', open);
+const loadLastBtn = document.getElementById('loadLastBtn');
+const openSave = open => {
+  loadLastBtn.hidden = !lastPicture;
+  saveModal.classList.toggle('open', open);
+};
+loadLastBtn.onclick = () => {
+  commitText();
+  if (mode !== 'draw' || !lastPicture) return;
+  const img = new Image();
+  img.onload = () => { snapshot(); pctx.drawImage(img, 0, 0, PW, PH); changed(); openSave(false); };
+  img.src = lastPicture;
+};
 document.getElementById('saveBtn').onclick = () => openSave(true);
 saveModal.addEventListener('click', e => { if (e.target === saveModal || e.target.closest('.mclose')) openSave(false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') openSave(false); });
