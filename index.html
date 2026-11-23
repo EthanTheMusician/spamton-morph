@@ -66,9 +66,11 @@
   }
   @keyframes keypop { from { transform: scale(0) rotate(-40deg); } to { transform: none; } }
   .shell {
-    position: absolute; z-index: 5; width: 96px; height: 150px; opacity: .16;
+    position: absolute; z-index: 5; width: 96px; height: 150px; opacity: 0; visibility: hidden;
+    transition: opacity 2s, visibility 2s;
     image-rendering: pixelated; filter: brightness(1.6); cursor: default;
   }
+  .shell.on { opacity: .12; visibility: visible; }   /* only after the title appears */
   .shell.nope { animation: shellnope .4s; }
   @keyframes shellnope { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
   .blackout {
@@ -350,8 +352,8 @@
 <div class="blackout" id="blackout"></div>
 <div class="fight" id="fight"><canvas id="fightCanvas" width="640" height="720"></canvas></div>
 
-<script src="targets.js?v=7"></script>
-<script src="app.js?v=7"></script>
-<script src="secret.js?v=7"></script>
+<script src="targets.js?v=8"></script>
+<script src="app.js?v=8"></script>
+<script src="secret.js?v=8"></script>
 </body>
 </html>

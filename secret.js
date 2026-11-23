@@ -3,8 +3,9 @@
 //  1. After the title shows up, stay completely still (no mouse, keys,
 //     scrolling or touching) for IDLE_SECONDS. "KEYGEN" in the message
 //     box turns green.
-//  2. Click it to get a green key (shown in the top-right corner, saved).
-//  3. A very faint shell is hidden somewhere on the page. Click it while
+//  2. Click it to get a green key (top-right corner). The key only lasts
+//     for this visit: every visit you have to earn it again.
+//  3. Once the title shows, a very faint shell is hidden around the page. Click it while
 //     holding the key: the screen fades to black and the boss fight starts.
 //  4. Win -> "YOU WON!" -> press R to go back to the normal page.
 //     Lose -> press R to try again.
@@ -32,24 +33,24 @@
   }
 
   let hasKey = false;
-  try { hasKey = localStorage.getItem(KEY_SAVE) === '1'; } catch (e) {}
+  // (Older versions saved the key. It isn't saved anymore, so clear that out.)
+  try { localStorage.removeItem(KEY_SAVE); } catch (e) {}
   function showKey() {
     if (document.querySelector('.key-icon')) return;
     const img = document.createElement('img');
     img.className = 'key-icon'; img.alt = 'Key'; img.src = keyImageURL();
     document.body.appendChild(img);
   }
-  if (hasKey) showKey();
 
   // ---------- 1 + 2: stay still, KEYGEN turns green, click it ----------
   const keygen = $('keygen');
   let lastActivity = performance.now();
   ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']
     .forEach(ev => window.addEventListener(ev, () => { lastActivity = performance.now(); }, { passive: true, capture: true }));
-  if (hasKey) keygen.classList.add('used');
 
   setInterval(() => {
     const revealed = $('reveal').classList.contains('show');
+    if (revealed && !shell.classList.contains('on')) { shell.classList.add('on'); placeShell(); }
     if (!revealed || hasKey || keygen.classList.contains('ready')) return;
     if (performance.now() - lastActivity >= IDLE_SECONDS * 1000) {
       keygen.classList.add('ready');   // stays green, so moving to click it is fine
@@ -60,7 +61,6 @@
   keygen.onclick = () => {
     if (!keygen.classList.contains('ready')) return;
     hasKey = true;
-    try { localStorage.setItem(KEY_SAVE, '1'); } catch (e) {}
     keygen.classList.remove('ready'); keygen.classList.add('used'); keygen.disabled = true;
     showKey();
   };
