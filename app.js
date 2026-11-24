@@ -49,14 +49,11 @@ let sourceDirty = true;      // picture changed since last calculation?
 let hasRevealed = false;     // has the secret title been shown yet?
 let touched = false;         // has the user changed the starter picture?
 // Saving (see SAVING near the bottom)
-const SAVE_KEY = 'morphSave';
-let saveTimer = null;
 // MORPH-again-with-no-change secret (see noChange near the bottom)
 const NO_CHANGE_UNLOCK = 7;
 let cleanMorph = false;      // picture untouched since the last morph?
 let noChangeStreak = 0;
 let shiverUntil = 0;
-let loading = true;            // don't save while the saved game is being loaded
 
 // Every morph is remembered, so BACK can undo them one at a time.
 const morphHistory = [];
@@ -226,7 +223,7 @@ function snapshot() {          // call BEFORE changing the picture
   touched = true;
   updateUndoButtons();
 }
-function changed() { sourceDirty = true; cleanMorph = false; noChangeStreak = 0; showPaper(); updateUndoButtons(); saveSoon(); }
+function changed() { sourceDirty = true; cleanMorph = false; noChangeStreak = 0; showPaper(); updateUndoButtons(); }
 function undo() {
   commitText();
   if (mode !== 'draw' || !undoStack.length) return;
@@ -579,9 +576,7 @@ document.getElementById('drawerClose').onclick = () => openDrawer(false);
 scrim.onclick = () => openDrawer(false);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') openDrawer(false); });
 
-let targetId = null;
 function selectTarget(t, card) {
-  targetId = t.id; saveSoon();
   cleanMorph = false; noChangeStreak = 0;
   const img = new Image();
   img.onload = () => {
@@ -621,16 +616,39 @@ function refreshLocks() {
   // Your own uploaded targets only show once Upload is unlocked.
   targetGrid.querySelectorAll('.target.custom').forEach(c => { c.hidden = !isUnlocked('upload'); });
 }
-function unlockTargets(ids, names) {
+function unlockTargets(ids) {
   ids.forEach(id => unlocked.add(id));
   try { localStorage.setItem(UNLOCK_KEY, JSON.stringify([...unlocked])); } catch (err) {}
-  // Fade to black, show what was unlocked, fade back.
-  const black = document.getElementById('blackout');
-  black.innerHTML = '<div class="unlock-msg"><b>NEW TARGETS UNLOCKED</b><span></span></div>';
-  black.querySelector('span').textContent = names;
-  black.classList.add('on');
+  showUnlocked(ids, 'NEW TARGETS UNLOCKED');
   setTimeout(refreshLocks, 1200);
-  setTimeout(() => black.classList.remove('on'), 4000);
+}
+// Fade to black and show each unlocked picture in a box with its name under it.
+function showUnlocked(ids, heading) {
+  const black = document.getElementById('blackout');
+  black.innerHTML = '<div class="unlock-msg"><b></b><div class="unlock-cards"></div></div>';
+  black.querySelector('b').textContent = heading;
+  const row = black.querySelector('.unlock-cards');
+  ids.forEach(id => {
+    const t = TARGETS.find(x => x.id === id);
+    const box = document.createElement('div');
+    box.className = 'unlock-card';
+    if (t) {
+      const img = document.createElement('img');
+      img.alt = ''; img.src = t.src;
+      box.appendChild(img);
+    } else {                       // the Upload card has no picture
+      const plus = document.createElement('div');
+      plus.className = 'plus'; plus.textContent = '+';
+      box.appendChild(plus);
+    }
+    const name = document.createElement('span');
+    name.textContent = t ? t.name : 'Upload';
+    box.appendChild(name);
+    row.appendChild(box);
+  });
+  black.classList.add('on');
+  clearTimeout(showUnlocked.timer);
+  showUnlocked.timer = setTimeout(() => black.classList.remove('on'), 3200 + ids.length * 500);
 }
 
 // The last card in the grid is always "Upload your own".
@@ -917,7 +935,7 @@ function noChange() {
   }
   tag.classList.remove('show'); void tag.offsetWidth; tag.classList.add('show');
   if (noChangeStreak === NO_CHANGE_UNLOCK && !(isUnlocked('glitch') && isUnlocked('laugh'))) {
-    unlockTargets(['glitch', 'laugh'], 'SINISTER · LAUGH');
+    unlockTargets(['glitch', 'laugh']);
   }
 }
 
@@ -938,7 +956,6 @@ goBtn.onclick = async () => {
   resetUndo();
   setMode('draw');
   if (!hasRevealed) { hasRevealed = true; reveal(); }
-  saveNow();
   cleanMorph = true; noChangeStreak = 0;
 };
 
@@ -956,75 +973,102 @@ backBtn.onclick = async () => {
   resetUndo();
   setMode('draw');
   showPaper();
-  saveNow();
 };
 
 // =====================================================================
-//  SAVING
-//  Your picture and the chosen target are kept in this browser (localStorage), so closing the tab
-//  doesn't lose anything. (Uploaded targets are saved separately, above.)
+//  PROGRESS CODES
+//  SAVE PROGRESS gives a code like K7QM-2XRA-9DPB. It looks random (and is
+//  different every time), but it secretly holds which targets you've
+//  unlocked. LOAD PROGRESS turns a code back into those unlocks, so you can
+//  move your progress to another computer or browser.
+//
+//  Inside a code (60 bits): 20 random bits ("salt") + 28 bits of unlocks
+//  scrambled using the salt + 12 check bits that catch typos.
+//  CODE_ORDER: only ever ADD to the end, or older codes will load wrong.
 // =====================================================================
-function saveNow() {
-  clearTimeout(saveTimer);
-  if (loading || !touched) return;   // nothing drawn yet: nothing to save
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({
-      target: targetId, picture: paper.toDataURL('image/png'),
-    }));
-  } catch (err) { /* storage full or blocked: nothing we can do */ }
+const CODE_ORDER = ['dance', 'hat', 'neo', 'portrait', 'closeup', 'glitch', 'laugh',
+                    'puppet', 'face', 'shell', 'upload'];
+const B32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';   // no I, L, O, U (easy to misread)
+function scramble(salt) {           // 28 bits of "noise" that only depend on the salt
+  let h = Math.imul(salt ^ 0x5bd1e995, 0x27d4eb2d);
+  h ^= h >>> 15; h = Math.imul(h, 0x165667b1); h ^= h >>> 13;
+  return (h >>> 0) & 0xFFFFFFF;
 }
-// Drawing changes the picture many times a second, so wait for a short pause.
-function saveSoon() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 600); }
-
-function loadSave() {
-  let data = null;
-  try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) {}
-  if (!data || typeof data !== 'object') { loading = false; return; }
-  // Every visit starts on the clean "draw something" text (and the title stays
-  // hidden until you morph). The saved picture waits in the SAVE window.
-  if (data.target) {
-    const card = [...targetGrid.querySelectorAll('.target')].find(c => c.dataset.id === data.target);
-    if (card && !card.classList.contains('locked')) card.click();
-  }
-  if (typeof data.picture === 'string' && data.picture.startsWith('data:image/')) {
-    lastPicture = data.picture;
-  }
-  loading = false;
+function check12(salt, mask) {      // 12 check bits: a typo almost always breaks these
+  let h = Math.imul(salt + 0x9e3779b9, 0x85ebca6b) ^ Math.imul(mask + 0x7f4a7c15, 0xc2b2ae35);
+  h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b); h ^= h >>> 16;
+  return (h >>> 0) & 0xFFF;
 }
-// The picture from your last visit (kept here even after you start drawing
-// again, since autosave then starts saving the new picture instead).
-let lastPicture = null;
+function makeCode() {
+  const mask = CODE_ORDER.reduce((m, id, i) => isUnlocked(id) ? m | (1 << i) : m, 0);
+  const salt = Math.floor(Math.random() * 0x100000);
+  let n = (BigInt(salt) << 40n) | (BigInt((mask ^ scramble(salt)) >>> 0) << 12n) | BigInt(check12(salt, mask));
+  let out = '';
+  for (let i = 0; i < 12; i++) { out = B32[Number(n & 31n)] + out; n >>= 5n; }
+  return out.match(/.{4}/g).join('-');
+}
+function readCode(code) {           // the list of unlocked ids, or null if the code isn't valid
+  const clean = code.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1').replace(/[^0-9A-Z]/g, '');
+  if (clean.length !== 12) return null;
+  let n = 0n;
+  for (const ch of clean) {
+    const v = B32.indexOf(ch);
+    if (v < 0) return null;
+    n = (n << 5n) | BigInt(v);
+  }
+  const salt = Number(n >> 40n);
+  const mask = (Number((n >> 12n) & 0xFFFFFFFn) ^ scramble(salt)) >>> 0;
+  if (check12(salt, mask) !== Number(n & 0xFFFn)) return null;
+  return CODE_ORDER.filter((id, i) => mask & (1 << i));
+}
 
-// SAVE button: download the picture, or start over.
 const saveModal = document.getElementById('saveModal');
-const loadLastBtn = document.getElementById('loadLastBtn');
-const openSave = open => {
-  loadLastBtn.hidden = !lastPicture;
-  saveModal.classList.toggle('open', open);
+const loadModal = document.getElementById('loadModal');
+const openModal = (m, open) => m.classList.toggle('open', open);
+[saveModal, loadModal].forEach(m => m.addEventListener('click', e => {
+  if (e.target === m || e.target.closest('.mclose')) openModal(m, false);
+}));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { openModal(saveModal, false); openModal(loadModal, false); }
+});
+
+// SAVE PROGRESS
+document.getElementById('saveBtn').onclick = () => {
+  document.getElementById('saveCode').value = makeCode();
+  document.getElementById('saveMsg').textContent = '';
+  openModal(saveModal, true);
 };
-loadLastBtn.onclick = () => {
-  commitText();
-  if (mode !== 'draw' || !lastPicture) return;
-  const img = new Image();
-  img.onload = () => { snapshot(); pctx.drawImage(img, 0, 0, PW, PH); changed(); openSave(false); };
-  img.src = lastPicture;
+document.getElementById('copyCode').onclick = async () => {
+  const box = document.getElementById('saveCode'), msg = document.getElementById('saveMsg');
+  box.select();
+  try { await navigator.clipboard.writeText(box.value); msg.textContent = 'Copied!'; }
+  catch (err) { msg.textContent = 'Select the code and press Ctrl+C to copy it.'; }
 };
-document.getElementById('saveBtn').onclick = () => openSave(true);
-saveModal.addEventListener('click', e => { if (e.target === saveModal || e.target.closest('.mclose')) openSave(false); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') openSave(false); });
-document.getElementById('downloadBtn').onclick = () => {
-  commitText();
-  const a = document.createElement('a');
-  a.download = 'spamton-morph.png';
-  a.href = paper.toDataURL('image/png');
-  a.click();
+
+// LOAD PROGRESS
+document.getElementById('loadOpenBtn').onclick = () => {
+  document.getElementById('loadMsg').textContent = '';
+  openModal(loadModal, true);
+  setTimeout(() => document.getElementById('loadCode').focus(), 50);
 };
-document.getElementById('resetBtn').onclick = () => {
-  if (!confirm('Start over? This erases your saved picture. Uploaded targets stay.')) return;
-  loading = true;
-  try { localStorage.removeItem(SAVE_KEY); } catch (err) {}
-  location.reload();
+document.getElementById('loadBtn').onclick = () => {
+  const box = document.getElementById('loadCode'), msg = document.getElementById('loadMsg');
+  const ids = readCode(box.value);
+  if (!ids) { msg.textContent = 'That code does not work. Check it for typos.'; return; }
+  const fresh = ids.filter(id => !isUnlocked(id));
+  // Loading a code replaces your progress with the progress in the code.
+  unlocked = new Set(ids);
+  try { localStorage.setItem(UNLOCK_KEY, JSON.stringify(ids)); } catch (err) {}
+  refreshLocks();
+  const on = targetGrid.querySelector('.target.on');
+  if (on && on.classList.contains('locked')) targetGrid.firstElementChild.click();   // back to Default
+  box.value = '';
+  msg.textContent = 'Progress loaded!';
+  if (fresh.length) { openModal(loadModal, false); showUnlocked(fresh, 'PROGRESS LOADED'); }
 };
+document.getElementById('loadCode').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('loadBtn').click();
+});
 
 // ---------- The surprise reveal ----------
 function reveal() {
@@ -1052,7 +1096,8 @@ showPaper();
 setTool('brush');
 updateColorUI();
 setMode('draw');
-loadSave();
+// (Older versions autosaved your picture; that's gone now, so tidy it away.)
+try { localStorage.removeItem('morphSave'); } catch (err) {}
 // The pixel font may arrive a moment late; redraw the starter text once it has.
 document.fonts.load('40px "Press Start 2P"').then(() => {
   if (!touched) { starterPicture(); showPaper(); }

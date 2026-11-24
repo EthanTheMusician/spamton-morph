@@ -115,7 +115,7 @@
     }
     hasKey = false;
     document.querySelector('.key-icon')?.remove();
-    unlockTargets(['neo', 'puppet', 'shell'], 'GIANT · NEO · SHELL');   // in app.js
+    unlockTargets(['neo', 'puppet', 'shell']);   // in app.js
     setTimeout(() => { shell.remove(); keygen.remove(); }, 1500);   // the secret is done
   };
 })();

@@ -81,7 +81,19 @@
   .blackout { display: flex; align-items: center; justify-content: center; }
   .unlock-msg { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; padding: 16px; }
   .unlock-msg b { font-weight: normal; color: #3dff4e; font-size: min(18px, 4.4vw); text-shadow: 0 0 8px #3dff4e; }
-  .unlock-msg span { color: var(--white); font-size: min(14px, 3.6vw); }
+  .unlock-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; max-width: 560px; }
+  .unlock-card {
+    width: 140px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    background: var(--white); color: var(--black); border: 4px solid #3dff4e;
+    padding: 8px 6px; font-size: 9px; text-transform: uppercase; line-height: 1.5; text-align: center;
+    animation: cardin .5s cubic-bezier(.2,1.5,.4,1) both;
+  }
+  .unlock-card:nth-child(2) { animation-delay: .15s; }
+  .unlock-card:nth-child(3) { animation-delay: .3s; }
+  .unlock-card:nth-child(4) { animation-delay: .45s; }
+  .unlock-card img { width: 100%; height: 120px; object-fit: contain; image-rendering: pixelated; }
+  .unlock-card .plus { height: 120px; display: grid; place-items: center; font-size: 40px; color: var(--pink); }
+  @keyframes cardin { from { transform: scale(.4); opacity: 0; } to { transform: none; opacity: 1; } }
   /* locked cards: an empty box that says TO BE UNLOCKED */
   #targetGrid .target .lockmsg { display: none; }
   #targetGrid .target.locked { cursor: default; background: var(--black); border: 4px dashed var(--dark);
@@ -272,6 +284,14 @@
   .mhead h2 span { color: var(--pink); }
   .mhead button { padding: 6px 9px; }
   .mtext { margin: 0; font-family: var(--term); font-size: 21px; line-height: 1.1; color: var(--white); }
+  .mtext.msg { color: var(--pink); min-height: 1.1em; }
+  .coderow { display: flex; gap: 8px; }
+  .coderow input {
+    flex: 1; min-width: 0; background: var(--black); color: var(--yellow);
+    border: 3px solid var(--dark); padding: 8px; font-family: var(--term); font-size: 24px;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .coderow input:focus { outline: none; border-color: var(--pink); }
   .danger { align-self: flex-start; border-color: var(--red); color: var(--red); }
   .danger:hover:not(:disabled) { background: var(--red); border-color: var(--red); color: var(--white); }
 </style>
@@ -286,7 +306,8 @@
       <div class="dialog"><span>*</span><span id="typed"></span><button id="keygen" class="keygen" disabled tabindex="-1">KEYGEN</button></div>
       <div class="hud">
         <span class="hud-btns">
-          <button id="saveBtn">Save</button>
+          <button id="saveBtn">Save progress</button>
+          <button id="loadOpenBtn">Load progress</button>
         </span>
       </div>
     </div>
@@ -350,23 +371,31 @@
 </aside>
 
 <!-- Save window -->
+<!-- Save progress -->
 <div class="modal" id="saveModal">
   <div class="mbox">
-    <div class="mhead"><h2>Save</h2><button class="mclose" aria-label="Close">X</button></div>
-    <p class="mtext">Your picture saves automatically in this browser. Each visit
-      starts fresh, but you can bring back the picture from last time here.</p>
-    <button id="loadLastBtn" style="align-self:flex-start">Load last picture</button>
-    <p class="mtext">To keep a copy of your picture, download it. You can load it back
-      later with the upload button.</p>
-    <button id="downloadBtn" style="align-self:flex-start">Download picture</button>
-    <button id="resetBtn" class="danger">Start over</button>
+    <div class="mhead"><h2>Save progress</h2><button class="mclose" aria-label="Close">X</button></div>
+    <p class="mtext">Your progress code. Write it down or copy it somewhere safe.
+      Load it later (on any computer) to get your unlocks back.</p>
+    <div class="coderow"><input id="saveCode" readonly><button id="copyCode">Copy</button></div>
+    <p class="mtext msg" id="saveMsg"></p>
+  </div>
+</div>
+
+<!-- Load progress -->
+<div class="modal" id="loadModal">
+  <div class="mbox">
+    <div class="mhead"><h2>Load progress</h2><button class="mclose" aria-label="Close">X</button></div>
+    <p class="mtext">Type or paste a progress code:</p>
+    <div class="coderow"><input id="loadCode" placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false"><button id="loadBtn">Load</button></div>
+    <p class="mtext msg" id="loadMsg"></p>
   </div>
 </div>
 
 <div class="blackout" id="blackout"></div>
 
-<script src="targets.js?v=10"></script>
-<script src="app.js?v=10"></script>
-<script src="secret.js?v=10"></script>
+<script src="targets.js?v=11"></script>
+<script src="app.js?v=11"></script>
+<script src="secret.js?v=11"></script>
 </body>
 </html>
