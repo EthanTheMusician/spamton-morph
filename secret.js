@@ -6,8 +6,8 @@
 //  2. Click it to get a green key (top-right corner). The key only lasts
 //     for this visit: every visit you have to earn it again.
 //  3. Once the title shows, a very faint shell is hidden around the page.
-//     Click it while holding the key to unlock three secret targets:
-//     Giant, NEO and Shell (saved for good).
+//     Click it while holding the key to unlock two secret targets:
+//     NEO and Shell (saved for good).
 // =====================================================================
 (() => {
   const IDLE_SECONDS = 20;
@@ -115,7 +115,7 @@
     }
     hasKey = false;
     document.querySelector('.key-icon')?.remove();
-    unlockTargets(['neo', 'puppet', 'shell']);   // in app.js
+    unlockTargets(['puppet', 'shell']);   // in app.js
     setTimeout(() => { shell.remove(); keygen.remove(); }, 1500);   // the secret is done
   };
 })();

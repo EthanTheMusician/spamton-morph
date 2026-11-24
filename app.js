@@ -216,8 +216,21 @@ document.getElementById('colorPair').onclick = () => {
 
 // ---------- Undo / redo ----------
 const undoStack = [], redoStack = [];
+// Which shape tools have been used on the current picture (for the Giant
+// secret). Each undo step remembers its own list, so undoing a shape
+// takes it off the list too.
+let drawnShapes = new Set();
+function grab() {              // the picture + its shape list, for undo/redo
+  const img = pctx.getImageData(0, 0, PW, PH);
+  img.shapes = new Set(drawnShapes);
+  return img;
+}
+function restore(img) {
+  pctx.putImageData(img, 0, 0);
+  drawnShapes = new Set(img.shapes || []);
+}
 function snapshot() {          // call BEFORE changing the picture
-  undoStack.push(pctx.getImageData(0, 0, PW, PH));
+  undoStack.push(grab());
   if (undoStack.length > MAX_UNDO) undoStack.shift();
   redoStack.length = 0;
   touched = true;
@@ -227,14 +240,14 @@ function changed() { sourceDirty = true; cleanMorph = false; noChangeStreak = 0;
 function undo() {
   commitText();
   if (mode !== 'draw' || !undoStack.length) return;
-  redoStack.push(pctx.getImageData(0, 0, PW, PH));
-  pctx.putImageData(undoStack.pop(), 0, 0);
+  redoStack.push(grab());
+  restore(undoStack.pop());
   changed();
 }
 function redo() {
   if (mode !== 'draw' || !redoStack.length) return;
-  undoStack.push(pctx.getImageData(0, 0, PW, PH));
-  pctx.putImageData(redoStack.pop(), 0, 0);
+  undoStack.push(grab());
+  restore(redoStack.pop());
   changed();
 }
 function updateUndoButtons() {
@@ -496,6 +509,7 @@ function endDrag(e) {
   if (!drag) return;
   if (isShape(tool)) {
     drawShape(pctx, drag.start, canvasPoint(e), e.shiftKey, drag.main, drag.other);
+    drawnShapes.add(tool);
   }
   clearInterval(drag.timer);
   drag = null;
@@ -521,6 +535,7 @@ function starterPicture() {
 clearBtn.onclick = () => {
   commitText(); snapshot();
   pctx.fillStyle = '#ffffff'; pctx.fillRect(0, 0, PW, PH);
+  drawnShapes.clear();
   changed();
 };
 
@@ -542,6 +557,7 @@ uploadInput.onchange = async e => {
   commitText(); snapshot();
   pctx.fillStyle = '#ffffff'; pctx.fillRect(0, 0, PW, PH);
   fitImage(pctx, img, PW, PH, 'cover');
+  drawnShapes.clear();
   e.target.value = '';
   changed();
 };
@@ -592,8 +608,9 @@ function selectTarget(t, card) {
 //  Only Default is open at the start. Every other card (and the Upload
 //  card, id 'upload') shows as a "TO BE UNLOCKED" box until a secret
 //  opens it. Unlocks are saved in this browser.
-//    KEYGEN secret (secret.js)     -> Giant ('neo'), NEO ('puppet'), Shell
-//    MORPH 7x with no change       -> Sinister ('glitch'), Laugh
+//    KEYGEN secret (secret.js)     -> NEO ('puppet'), Shell
+//    MORPH 7x with no change       -> Sinister ('glitch')
+//    Morph a picture with all 12 shapes on it -> Giant ('neo')
 // =====================================================================
 const UNLOCK_KEY = 'morphUnlocked';
 let unlocked = new Set();
@@ -908,7 +925,7 @@ function animate(entry, forward) {
 function resetUndo() { undoStack.length = 0; redoStack.length = 0; }
 
 // MORPH again without changing anything = "No change!" (the pixels just
-// shiver). Do it NO_CHANGE_UNLOCK times in a row to unlock Sinister + Laugh.
+// shiver). Do it NO_CHANGE_UNLOCK times in a row to unlock Sinister.
 function noChange() {
   noChangeStreak++;
   // the pixels shiver: each band of rows jumps a pixel or two for a moment
@@ -934,8 +951,8 @@ function noChange() {
     stage.parentElement.appendChild(tag);
   }
   tag.classList.remove('show'); void tag.offsetWidth; tag.classList.add('show');
-  if (noChangeStreak === NO_CHANGE_UNLOCK && !(isUnlocked('glitch') && isUnlocked('laugh'))) {
-    unlockTargets(['glitch', 'laugh']);
+  if (noChangeStreak === NO_CHANGE_UNLOCK && !isUnlocked('glitch')) {
+    unlockTargets(['glitch']);
   }
 }
 
@@ -957,6 +974,10 @@ goBtn.onclick = async () => {
   setMode('draw');
   if (!hasRevealed) { hasRevealed = true; reveal(); }
   cleanMorph = true; noChangeStreak = 0;
+  // Giant secret: the picture you morphed had every one of the 12 shapes on it.
+  const allShapes = SHAPE_IDS.every(id => drawnShapes.has(id));
+  drawnShapes.clear();         // the morphed picture is a fresh start
+  if (allShapes && !isUnlocked('neo')) unlockTargets(['neo']);
 };
 
 backBtn.onclick = async () => {
