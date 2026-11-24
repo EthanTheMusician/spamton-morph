@@ -613,6 +613,10 @@ function selectTarget(t, card) {
 //    Morph a picture with all 12 shapes on it -> Giant ('neo')
 // =====================================================================
 const UNLOCK_KEY = 'morphUnlocked';
+// TESTING SWITCH: true = every refresh wipes all unlocks (handy for testing
+// secrets and progress codes). Set it to false to keep progress between visits.
+const WIPE_ON_REFRESH = true;
+if (WIPE_ON_REFRESH) { try { localStorage.removeItem(UNLOCK_KEY); } catch (err) {} }
 let unlocked = new Set();
 try {
   const raw = localStorage.getItem(UNLOCK_KEY);
