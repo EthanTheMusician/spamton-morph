@@ -51,6 +51,11 @@ let touched = false;         // has the user changed the starter picture?
 // Saving (see SAVING near the bottom)
 const SAVE_KEY = 'morphSave';
 let saveTimer = null;
+// MORPH-again-with-no-change secret (see noChange near the bottom)
+const NO_CHANGE_UNLOCK = 7;
+let cleanMorph = false;      // picture untouched since the last morph?
+let noChangeStreak = 0;
+let shiverUntil = 0;
 let loading = true;            // don't save while the saved game is being loaded
 
 // Every morph is remembered, so BACK can undo them one at a time.
@@ -221,7 +226,7 @@ function snapshot() {          // call BEFORE changing the picture
   touched = true;
   updateUndoButtons();
 }
-function changed() { sourceDirty = true; showPaper(); updateUndoButtons(); saveSoon(); }
+function changed() { sourceDirty = true; cleanMorph = false; noChangeStreak = 0; showPaper(); updateUndoButtons(); saveSoon(); }
 function undo() {
   commitText();
   if (mode !== 'draw' || !undoStack.length) return;
@@ -577,6 +582,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') openDrawer(f
 let targetId = null;
 function selectTarget(t, card) {
   targetId = t.id; saveSoon();
+  cleanMorph = false; noChangeStreak = 0;
   const img = new Image();
   img.onload = () => {
     targetImg = img;
@@ -586,36 +592,71 @@ function selectTarget(t, card) {
   targetGrid.querySelectorAll('.target').forEach(c => c.classList.toggle('on', c === card));
 }
 
-// Secret targets: hidden until the KEYGEN secret is found (see secret.js).
-// Giant = 'neo', NEO = 'puppet', Shell = 'shell'.
-const SECRET_IDS = ['neo', 'puppet', 'shell'];
+// =====================================================================
+//  UNLOCKS
+//  Only Default is open at the start. Every other card (and the Upload
+//  card, id 'upload') shows as a "TO BE UNLOCKED" box until a secret
+//  opens it. Unlocks are saved in this browser.
+//    KEYGEN secret (secret.js)     -> Giant ('neo'), NEO ('puppet'), Shell
+//    MORPH 7x with no change       -> Sinister ('glitch'), Laugh
+// =====================================================================
 const UNLOCK_KEY = 'morphUnlocked';
-let secretUnlocked = false;
-try { secretUnlocked = localStorage.getItem(UNLOCK_KEY) === '1'; } catch (err) {}
-function unlockSecretTargets() {
-  secretUnlocked = true;
-  try { localStorage.setItem(UNLOCK_KEY, '1'); } catch (err) {}
-  targetGrid.querySelectorAll('.secret-locked').forEach(c => c.classList.remove('secret-locked'));
+let unlocked = new Set();
+try {
+  const raw = localStorage.getItem(UNLOCK_KEY);
+  if (raw === '1') unlocked = new Set(['neo', 'puppet', 'shell']);   // older save format
+  else if (raw) unlocked = new Set(JSON.parse(raw));
+} catch (err) {}
+const isUnlocked = id => id === 'bigshot' || unlocked.has(id);
+
+function lockCard(card, id) {
+  const locked = !isUnlocked(id);
+  card.classList.toggle('locked', locked);
+  const input = card.querySelector('input');
+  if (input) input.disabled = locked;
+}
+function refreshLocks() {
+  targetGrid.querySelectorAll('.target[data-id]').forEach(c => lockCard(c, c.dataset.id));
+  lockCard(addCard, 'upload');
+  // Your own uploaded targets only show once Upload is unlocked.
+  targetGrid.querySelectorAll('.target.custom').forEach(c => { c.hidden = !isUnlocked('upload'); });
+}
+function unlockTargets(ids, names) {
+  ids.forEach(id => unlocked.add(id));
+  try { localStorage.setItem(UNLOCK_KEY, JSON.stringify([...unlocked])); } catch (err) {}
+  // Fade to black, show what was unlocked, fade back.
+  const black = document.getElementById('blackout');
+  black.innerHTML = '<div class="unlock-msg"><b>NEW TARGETS UNLOCKED</b><span></span></div>';
+  black.querySelector('span').textContent = names;
+  black.classList.add('on');
+  setTimeout(refreshLocks, 1200);
+  setTimeout(() => black.classList.remove('on'), 4000);
 }
 
 // The last card in the grid is always "Upload your own".
 const addCard = document.createElement('label');
 addCard.className = 'target add';
-addCard.innerHTML = '<b>+</b><span>Upload your own</span><input type="file" accept="image/*">';
+addCard.innerHTML = '<b>+</b><span>Upload your own</span><input type="file" accept="image/*"><i class="lockmsg">To be unlocked</i>';
 targetGrid.appendChild(addCard);
 
 function addTargetCard(t, custom) {
   const card = document.createElement('button');
-  card.className = custom ? 'target' : 'target builtin';  // built-in names shown in CAPS
+  card.className = custom ? 'target custom' : 'target builtin';  // built-in names shown in CAPS
   const name = document.createElement('span');
   name.textContent = t.name;           // textContent: safe for any file name
   card.title = t.name;
-  card.dataset.id = t.id;
-  if (!custom && !secretUnlocked && SECRET_IDS.includes(t.id)) card.classList.add('secret-locked');
   const img = document.createElement('img');
   img.alt = ''; img.src = t.src;
   card.append(img, name);
+  if (!custom) {
+    card.dataset.id = t.id;
+    const lockmsg = document.createElement('i');
+    lockmsg.className = 'lockmsg'; lockmsg.textContent = 'To be unlocked';
+    card.appendChild(lockmsg);
+    lockCard(card, t.id);
+  }
   card.onclick = () => {
+    if (card.classList.contains('locked')) return;
     selectTarget(t, card); setTimeout(() => openDrawer(false), 250);
   };
   if (custom) {
@@ -651,6 +692,7 @@ TARGETS.forEach((t, i) => {
   if (i === 0) selectTarget(t, card);
 });
 customTargets.forEach(t => addTargetCard(t, true));
+refreshLocks();
 
 addCard.querySelector('input').onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
@@ -847,9 +889,42 @@ function animate(entry, forward) {
 // (BACK is the way to undo a morph).
 function resetUndo() { undoStack.length = 0; redoStack.length = 0; }
 
+// MORPH again without changing anything = "No change!" (the pixels just
+// shiver). Do it NO_CHANGE_UNLOCK times in a row to unlock Sinister + Laugh.
+function noChange() {
+  noChangeStreak++;
+  // the pixels shiver: each band of rows jumps a pixel or two for a moment
+  const wasShivering = performance.now() < shiverUntil;
+  shiverUntil = performance.now() + 450;
+  if (!wasShivering) {
+    const frame = () => {
+      if (performance.now() >= shiverUntil || mode !== 'draw') { showPaper(); return; }
+      sctx.fillStyle = '#ffffff'; sctx.fillRect(0, 0, PW, PH);
+      for (let y = 0; y < PH; y += 8) {
+        const dx = Math.round((Math.random() - .5) * 4), dy = Math.round((Math.random() - .5) * 2);
+        sctx.drawImage(paper, 0, y, PW, 8, dx, y + dy, PW, 8);
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+  // little "No change!" text near the corner of the canvas
+  let tag = document.getElementById('noChange');
+  if (!tag) {
+    tag = document.createElement('div');
+    tag.id = 'noChange'; tag.className = 'nochange'; tag.textContent = 'No change!';
+    stage.parentElement.appendChild(tag);
+  }
+  tag.classList.remove('show'); void tag.offsetWidth; tag.classList.add('show');
+  if (noChangeStreak === NO_CHANGE_UNLOCK && !(isUnlocked('glitch') && isUnlocked('laugh'))) {
+    unlockTargets(['glitch', 'laugh'], 'SINISTER · LAUGH');
+  }
+}
+
 goBtn.onclick = async () => {
   commitText();
   if (mode !== 'draw' || !targetImg) return;
+  if (cleanMorph) { noChange(); return; }
   setMode('busy');
   const before = copyOf(paper);
   if (sourceDirty || !particles) { await solve(); particles = buildParticles(); }
@@ -864,6 +939,7 @@ goBtn.onclick = async () => {
   setMode('draw');
   if (!hasRevealed) { hasRevealed = true; reveal(); }
   saveNow();
+  cleanMorph = true; noChangeStreak = 0;
 };
 
 backBtn.onclick = async () => {
@@ -876,6 +952,7 @@ backBtn.onclick = async () => {
   // on top of the morph since then are undone too).
   pctx.drawImage(entry.before, 0, 0);
   particles = entry.particles; sourceDirty = false;  // MORPH again reuses this match
+  cleanMorph = false; noChangeStreak = 0;
   resetUndo();
   setMode('draw');
   showPaper();
@@ -907,7 +984,7 @@ function loadSave() {
   // hidden until you morph). The saved picture waits in the SAVE window.
   if (data.target) {
     const card = [...targetGrid.querySelectorAll('.target')].find(c => c.dataset.id === data.target);
-    if (card && !card.classList.contains('secret-locked')) card.click();
+    if (card && !card.classList.contains('locked')) card.click();
   }
   if (typeof data.picture === 'string' && data.picture.startsWith('data:image/')) {
     lastPicture = data.picture;

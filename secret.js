@@ -13,7 +13,7 @@
   const IDLE_SECONDS = 20;
   const KEY_SAVE = 'morphKey';
   const $ = id => document.getElementById(id);
-  if (secretUnlocked) { $('keygen').remove(); return; }   // already found: nothing left to do
+  if (isUnlocked('shell')) { $('keygen').remove(); return; }   // already found: nothing left to do
 
   // ---------- A little pixel key (drawn here, then colored green) ----------
   const KEY_ART = [
@@ -115,14 +115,7 @@
     }
     hasKey = false;
     document.querySelector('.key-icon')?.remove();
-    const black = $('blackout');
-    black.innerHTML = '<div class="unlock-msg"><b>NEW TARGETS UNLOCKED</b><span>GIANT &middot; NEO &middot; SHELL</span></div>';
-    black.classList.add('on');
-    setTimeout(() => {
-      unlockSecretTargets();          // in app.js: shows the cards and saves it
-      shell.remove();                 // the secret is done
-      keygen.remove();
-    }, 1500);
-    setTimeout(() => { black.classList.remove('on'); }, 4200);
+    unlockTargets(['neo', 'puppet', 'shell'], 'GIANT · NEO · SHELL');   // in app.js
+    setTimeout(() => { shell.remove(); keygen.remove(); }, 1500);   // the secret is done
   };
 })();
