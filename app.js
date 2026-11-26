@@ -216,10 +216,13 @@ document.getElementById('colorPair').onclick = () => {
 
 // ---------- Undo / redo ----------
 const undoStack = [], redoStack = [];
-// Which shape tools have been used on the current picture (for the Giant
-// secret). Each undo step remembers its own list, so undoing a shape
-// takes it off the list too.
+// Facts about the current picture, used by the secrets. Each undo step
+// remembers its own copy, so undoing something takes it back off the list.
+//   shape ids ('rect', 'star', ...)  shape tools used on it   (Giant)
+//   'morphed'                        it came out of a morph   (Portrait)
+//   'frame'                          a rectangle was drawn around the whole edge (Portrait)
 let drawnShapes = new Set();
+const FRAME_MARGIN = 40;   // how close to the canvas edges a "frame" rectangle must be
 function grab() {              // the picture + its shape list, for undo/redo
   const img = pctx.getImageData(0, 0, PW, PH);
   img.shapes = new Set(drawnShapes);
@@ -512,11 +515,25 @@ stage.addEventListener('pointermove', e => {
   else if (tool !== 'spray') { freehand(drag.last, p, drag.main); showPaper(); }
   drag.last = p;
 });
+// Portrait secret: an outline Rectangle / Rounded rectangle whose four
+// sides all sit close to the canvas edges (and are still on the canvas).
+function isFrame(a, b, shift) {
+  if ((tool !== 'rect' && tool !== 'roundrect') || fillMode !== 'outline') return false;
+  let w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+  if (shift) w = h = Math.max(w, h);
+  const x = b.x < a.x ? a.x - w : a.x, y = b.y < a.y ? a.y - h : a.y;
+  const half = sizes.shape() / 2;     // a side drawn just off the canvas is still half visible
+  const near = (v, edge) => Math.abs(v - edge) <= FRAME_MARGIN && (edge === 0 ? v > -half : v < edge + half);
+  return near(x, 0) && near(y, 0) && near(x + w, PW) && near(y + h, PH);
+}
+
 function endDrag(e) {
   if (!drag) return;
   if (isShape(tool)) {
-    drawShape(pctx, drag.start, canvasPoint(e), e.shiftKey, drag.main, drag.other);
+    const end = canvasPoint(e);
+    drawShape(pctx, drag.start, end, e.shiftKey, drag.main, drag.other);
     drawnShapes.add(tool);
+    if (isFrame(drag.start, end, e.shiftKey)) drawnShapes.add('frame');
   }
   clearInterval(drag.timer);
   drag = null;
@@ -618,6 +635,7 @@ function selectTarget(t, card) {
 //    KEYGEN secret (secret.js)     -> NEO ('puppet'), Shell
 //    MORPH 7x with no change       -> Sinister ('glitch')
 //    Morph a picture with all 12 shapes on it -> Giant ('neo')
+//    Frame a morphed picture with a rectangle, then morph -> Portrait
 // =====================================================================
 const UNLOCK_KEY = 'morphUnlocked';
 // TESTING SWITCH: true = every refresh wipes all unlocks (handy for testing
@@ -973,8 +991,9 @@ goBtn.onclick = async () => {
   if (cleanMorph) { noChange(); return; }
   setMode('busy');
   const before = copyOf(paper);
+  const facts = new Set(drawnShapes);   // what the picture had on it before this morph
   if (sourceDirty || !particles) { await solve(); particles = buildParticles(); }
-  const entry = { before, particles, W, H, N, SCALE };
+  const entry = { before, facts, particles, W, H, N, SCALE };
   await animate(entry, true);
   // The finished morph becomes your new picture, so you can draw on it
   // and morph again, as many times as you like.
@@ -986,9 +1005,14 @@ goBtn.onclick = async () => {
   if (!hasRevealed) { hasRevealed = true; reveal(); }
   cleanMorph = true; noChangeStreak = 0;
   // Giant secret: the picture you morphed had every one of the 12 shapes on it.
-  const allShapes = SHAPE_IDS.every(id => drawnShapes.has(id));
-  drawnShapes.clear();         // the morphed picture is a fresh start
-  if (allShapes && !isUnlocked('neo')) unlockTargets(['neo']);
+  const allShapes = SHAPE_IDS.every(id => facts.has(id));
+  // Portrait secret: a morphed picture with a frame drawn around its edge.
+  const framed = facts.has('morphed') && facts.has('frame');
+  drawnShapes = new Set(['morphed']);   // the new picture: fresh, and it came from a morph
+  const fresh = [];
+  if (allShapes && !isUnlocked('neo')) fresh.push('neo');
+  if (framed && !isUnlocked('portrait')) fresh.push('portrait');
+  if (fresh.length) unlockTargets(fresh);
 };
 
 backBtn.onclick = async () => {
@@ -1000,6 +1024,7 @@ backBtn.onclick = async () => {
   // Restore the exact picture from before that morph (any lines drawn
   // on top of the morph since then are undone too).
   pctx.drawImage(entry.before, 0, 0);
+  drawnShapes = new Set(entry.facts);
   particles = entry.particles; sourceDirty = false;  // MORPH again reuses this match
   cleanMorph = false; noChangeStreak = 0;
   resetUndo();
