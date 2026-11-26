@@ -362,8 +362,15 @@ function shapePath(ctx, id, x, y, w, h) {
   ctx.beginPath();
   if (id === 'rect') ctx.rect(x, y, w, h);
   else if (id === 'roundrect') {
+    // Drawn by hand: the browser's own roundRect() leaves a stray point at the
+    // starting corner, which the round line ends turn into a visible dot.
     const r = Math.min(w, h) * 0.2;
-    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
   }
   else if (id === 'ellipse') ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
   else if (id === 'heart') {
